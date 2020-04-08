@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	parser "github.com/MemeLabs/chat-parser"
+	// "mvdan.cc/xurls/v2"
 	"nhooyr.io/websocket"
 )
 
@@ -24,11 +25,8 @@ func main() {
 	defer resp.Body.Close()
 	response := struct {
 		Emotes []struct {
-			Name     string `json:"name"`
-			Path     string `json:"path"`
-			Animated bool   `json:"animated"`
+			Name string `json:"name"`
 		} `json:"emotes"`
-		CSS string `json:"css"`
 	}{}
 	contents, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
@@ -64,8 +62,7 @@ func main() {
 
 	userResponse := struct {
 		Users []struct {
-			Nick     string        `json:"nick"`
-			Features []interface{} `json:"features"`
+			Nick string `json:"nick"`
 		} `json:"users"`
 	}{}
 	_, data, err := c.Read(ctx)
@@ -90,6 +87,7 @@ func main() {
 		EmoteModifiers: []string{"mirror", "flip", "rain", "snow", "rustle", "worth", "love", "spin", "wide", "lag", "hyper"},
 	})
 
+	// rxRelaxed := xurls.Relaxed()
 	for {
 		_, data, err := c.Read(ctx)
 		if err != nil {
@@ -106,7 +104,21 @@ func main() {
 
 			y := content["data"].(string)
 			p := parser.NewParser(parserCtx, parser.NewLexer(y))
-			fmt.Printf("%q %+v\n", y, p.ParseMessage())
+			entities := make(map[string][]parser.Node)
+			for _, n := range p.ParseMessage().Nodes {
+				switch i := n.(type) {
+				case *parser.Emote:
+					entities["emotes"] = append(entities["emotes"], i)
+				case *parser.Nick:
+					entities["nick"] = append(entities["nick"], i)
+				default:
+					// entities["links"] = append(entities["links"], )
+					break
+				}
+			}
+
+			z, _ := json.Marshal(entities)
+			fmt.Printf("%q %+v\n", y, string(z))
 		}
 	}
 }
