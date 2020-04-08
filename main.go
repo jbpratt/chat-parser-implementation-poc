@@ -15,7 +15,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-const addr = "wss://chat.strims.gg/ws"
+const addr = "wss://chat2.strims.gg/ws"
 
 func main() {
 	resp, err := http.Get("https://chat.strims.gg/emote-manifest.json")
@@ -104,21 +104,36 @@ func main() {
 
 			y := content["data"].(string)
 			p := parser.NewParser(parserCtx, parser.NewLexer(y))
-			entities := make(map[string][]parser.Node)
-			for _, n := range p.ParseMessage().Nodes {
-				switch i := n.(type) {
-				case *parser.Emote:
-					entities["emotes"] = append(entities["emotes"], i)
-				case *parser.Nick:
-					entities["nick"] = append(entities["nick"], i)
-				default:
-					// entities["links"] = append(entities["links"], )
-					break
-				}
-			}
+			span := p.ParseMessage()
 
+			entities := make(map[string][]parser.Node)
+			processNode(span, entities)
 			z, _ := json.Marshal(entities)
-			fmt.Printf("%q %+v\n", y, string(z))
+			fmt.Println(string(z))
 		}
+	}
+}
+
+func processNode(node parser.Node, entities map[string][]parser.Node) {
+	switch i := node.(type) {
+	case *parser.Span:
+		if len(i.Nodes) > 0 {
+			for _, p := range i.Nodes {
+				processNode(p, entities)
+			}
+		}
+		switch i.Type {
+		case parser.SpanSpoiler:
+			entities["spoiler"] = append(entities["spoiler"], node)
+		case parser.SpanCode:
+			entities["code"] = append(entities["code"], node)
+		case parser.SpanGreentext:
+			entities["greentext"] = append(entities["greentext"], node)
+		case parser.SpanMessage:
+		}
+	case *parser.Emote:
+		entities["emotes"] = append(entities["emotes"], node)
+	case *parser.Nick:
+		entities["nicks"] = append(entities["nicks"], node)
 	}
 }
