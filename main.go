@@ -8,14 +8,15 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 
 	parser "github.com/MemeLabs/chat-parser"
-	// "mvdan.cc/xurls/v2"
+	"mvdan.cc/xurls/v2"
 	"nhooyr.io/websocket"
 )
 
-const addr = "wss://chat.strims.gg/ws"
+const addr = "wss://chat2.strims.gg/ws"
 
 func main() {
 	resp, err := http.Get("https://chat.strims.gg/emote-manifest.json")
@@ -87,7 +88,7 @@ func main() {
 		EmoteModifiers: []string{"mirror", "flip", "rain", "snow", "rustle", "worth", "love", "spin", "wide", "lag", "hyper"},
 	})
 
-	// rxRelaxed := xurls.Relaxed()
+	rxRelaxed := xurls.Relaxed()
 	for {
 		_, data, err := c.Read(ctx)
 		if err != nil {
@@ -102,23 +103,100 @@ func main() {
 				log.Fatal(err)
 			}
 
-			y := content["data"].(string)
-			p := parser.NewParser(parserCtx, parser.NewLexer(y))
-			entities := make(map[string][]parser.Node)
-			for _, n := range p.ParseMessage().Nodes {
-				switch i := n.(type) {
-				case *parser.Emote:
-					entities["emotes"] = append(entities["emotes"], i)
-				case *parser.Nick:
-					entities["nick"] = append(entities["nick"], i)
-				default:
-					// entities["links"] = append(entities["links"], )
-					break
-				}
-			}
+			msg := content["data"].(string)
+			entities := extractEntities(
+				parserCtx,
+				rxRelaxed,
+				msg,
+			)
 
 			z, _ := json.Marshal(entities)
-			fmt.Printf("%q %+v\n", y, string(z))
+			fmt.Printf("%q %+v\n", msg, string(z))
 		}
 	}
+}
+
+func extractEntities(parserCtx *parser.ParserContext, urls *regexp.Regexp, msg string) *Entities {
+	e := &Entities{}
+	addEntitiesFromSpan(e, parser.NewParser(parserCtx, parser.NewLexer(msg)).ParseMessage())
+
+	for _, b := range urls.FindAllStringIndex(msg, -1) {
+		e.Links = append(e.Links, &Link{
+			URL:    msg[b[0]:b[1]],
+			Bounds: [2]int{b[0], b[1]},
+		})
+	}
+
+	return e
+}
+
+func addEntitiesFromSpan(e *Entities, span *parser.Span) {
+	for _, ni := range span.Nodes {
+		switch n := ni.(type) {
+		case *parser.Emote:
+			e.Emotes = append(e.Emotes, &Emote{
+				Name:   n.Name,
+				Bounds: [2]int{n.Pos(), n.End()},
+			})
+		case *parser.Nick:
+			e.Nicks = append(e.Nicks, &Nick{
+				Nick:   n.Nick,
+				Bounds: [2]int{n.Pos(), n.End()},
+			})
+		case *parser.Tag:
+			e.Tags = append(e.Tags, &Tag{
+				Name:   n.Name,
+				Bounds: [2]int{n.Pos(), n.End()},
+			})
+		case *parser.Span:
+			switch n.Type {
+			case parser.SpanCode:
+				e.Codes = append(e.Codes, &Code{
+					Bounds: [2]int{n.Pos(), n.End()},
+				})
+			case parser.SpanSpoiler:
+				e.Spoilers = append(e.Spoilers, &Spoiler{
+					Bounds: [2]int{n.Pos(), n.End()},
+				})
+				addEntitiesFromSpan(e, n)
+			}
+		}
+	}
+}
+
+type Link struct {
+	URL    string `json:"url,omitempty"`
+	Bounds [2]int `json:"bounds,omitempty"`
+}
+
+type Emote struct {
+	Name   string `json:"name,omitempty"`
+	Bounds [2]int `json:"bounds,omitempty"`
+}
+
+type Nick struct {
+	Nick   string `json:"nick,omitempty"`
+	Bounds [2]int `json:"bounds,omitempty"`
+}
+
+type Tag struct {
+	Name   string `json:"name,omitempty"`
+	Bounds [2]int `json:"bounds,omitempty"`
+}
+
+type Code struct {
+	Bounds [2]int `json:"bounds,omitempty"`
+}
+
+type Spoiler struct {
+	Bounds [2]int `json:"bounds,omitempty"`
+}
+
+type Entities struct {
+	Links    []*Link    `json:"links,omitempty"`
+	Emotes   []*Emote   `json:"emotes,omitempty"`
+	Nicks    []*Nick    `json:"nicks,omitempty"`
+	Tags     []*Tag     `json:"tags,omitempty"`
+	Codes    []*Code    `json:"codes,omitempty"`
+	Spoilers []*Spoiler `json:"spoilers,omitempty"`
 }
