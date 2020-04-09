@@ -15,7 +15,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-const addr = "wss://chat2.strims.gg/ws"
+const addr = "wss://chat.strims.gg/ws"
 
 func main() {
 	resp, err := http.Get("https://chat.strims.gg/emote-manifest.json")
@@ -117,10 +117,8 @@ func main() {
 func processNode(node parser.Node, entities map[string][]parser.Node) {
 	switch i := node.(type) {
 	case *parser.Span:
-		if len(i.Nodes) > 0 {
-			for _, p := range i.Nodes {
-				processNode(p, entities)
-			}
+		for _, p := range i.Nodes {
+			processNode(p, entities)
 		}
 		switch i.Type {
 		case parser.SpanSpoiler:
