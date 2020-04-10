@@ -16,7 +16,7 @@ import (
 	"nhooyr.io/websocket"
 )
 
-const addr = "wss://chat2.strims.gg/ws"
+const addr = "wss://chat.strims.gg/ws"
 
 func main() {
 	resp, err := http.Get("https://chat.strims.gg/emote-manifest.json")
@@ -131,6 +131,21 @@ func extractEntities(parserCtx *parser.ParserContext, urls *regexp.Regexp, msg s
 }
 
 func addEntitiesFromSpan(e *Entities, span *parser.Span) {
+	switch span.Type {
+	case parser.SpanCode:
+		e.Codes = append(e.Codes, &Code{
+			Bounds: [2]int{span.Pos(), span.End()},
+		})
+	case parser.SpanSpoiler:
+		e.Spoilers = append(e.Spoilers, &Spoiler{
+			Bounds: [2]int{span.Pos(), span.End()},
+		})
+	case parser.SpanGreentext:
+		e.Greentexts = append(e.Greentexts, &Greentext{
+			Bounds: [2]int{span.Pos(), span.End()},
+		})
+	}
+
 	for _, ni := range span.Nodes {
 		switch n := ni.(type) {
 		case *parser.Emote:
@@ -149,17 +164,7 @@ func addEntitiesFromSpan(e *Entities, span *parser.Span) {
 				Bounds: [2]int{n.Pos(), n.End()},
 			})
 		case *parser.Span:
-			switch n.Type {
-			case parser.SpanCode:
-				e.Codes = append(e.Codes, &Code{
-					Bounds: [2]int{n.Pos(), n.End()},
-				})
-			case parser.SpanSpoiler:
-				e.Spoilers = append(e.Spoilers, &Spoiler{
-					Bounds: [2]int{n.Pos(), n.End()},
-				})
-				addEntitiesFromSpan(e, n)
-			}
+			addEntitiesFromSpan(e, n)
 		}
 	}
 }
@@ -192,11 +197,16 @@ type Spoiler struct {
 	Bounds [2]int `json:"bounds,omitempty"`
 }
 
+type Greentext struct {
+	Bounds [2]int `json:"bounds,omitempty"`
+}
+
 type Entities struct {
-	Links    []*Link    `json:"links,omitempty"`
-	Emotes   []*Emote   `json:"emotes,omitempty"`
-	Nicks    []*Nick    `json:"nicks,omitempty"`
-	Tags     []*Tag     `json:"tags,omitempty"`
-	Codes    []*Code    `json:"codes,omitempty"`
-	Spoilers []*Spoiler `json:"spoilers,omitempty"`
+	Links      []*Link      `json:"links,omitempty"`
+	Emotes     []*Emote     `json:"emotes,omitempty"`
+	Nicks      []*Nick      `json:"nicks,omitempty"`
+	Tags       []*Tag       `json:"tags,omitempty"`
+	Codes      []*Code      `json:"codes,omitempty"`
+	Spoilers   []*Spoiler   `json:"spoilers,omitempty"`
+	Greentexts []*Greentext `json:"greentexts,omitempty"`
 }
