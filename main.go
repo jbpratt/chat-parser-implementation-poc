@@ -8,14 +8,15 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"regexp"
 	"strings"
 
 	parser "github.com/MemeLabs/chat-parser"
-	// "mvdan.cc/xurls/v2"
+	"mvdan.cc/xurls/v2"
 	"nhooyr.io/websocket"
 )
 
-const addr = "wss://chat.strims.gg/ws"
+const addr = "wss://chat2.strims.gg/ws"
 
 func main() {
 	resp, err := http.Get("https://chat.strims.gg/emote-manifest.json")
@@ -87,7 +88,8 @@ func main() {
 		EmoteModifiers: []string{"mirror", "flip", "rain", "snow", "rustle", "worth", "love", "spin", "wide", "lag", "hyper"},
 	})
 
-	// rxRelaxed := xurls.Relaxed()
+	rxRelaxed := xurls.Relaxed()
+
 	for {
 		_, data, err := c.Read(ctx)
 		if err != nil {
@@ -107,6 +109,12 @@ func main() {
 			span := p.ParseMessage()
 
 			entities := make(map[string][]parser.Node)
+
+			links := extractLinks([]byte(y), rxRelaxed)
+
+			for _, link := range links {
+				span.Insert(link)
+			}
 			processNode(span, entities)
 			z, _ := json.Marshal(entities)
 			fmt.Println(string(z))
@@ -133,5 +141,19 @@ func processNode(node parser.Node, entities map[string][]parser.Node) {
 		entities["emotes"] = append(entities["emotes"], node)
 	case *parser.Nick:
 		entities["nicks"] = append(entities["nicks"], node)
+	case *parser.Link:
+		entities["links"] = append(entities["links"], node)
 	}
+}
+
+func extractLinks(input []byte, exp *regexp.Regexp) []*parser.Link {
+	positions := exp.FindAllIndex(input, -1)
+	if len(positions) > 0 {
+		links := make([]*parser.Link, len(positions))
+		for _, link := range positions {
+			links = append(links, &parser.Link{URL: string(input[link[0]:link[1]]), TokPos: link[0], TokEnd: link[1]})
+		}
+		return links
+	}
+	return nil
 }
